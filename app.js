@@ -58,6 +58,7 @@ app.use((req, res, next) => {
 
 app.use('/analysts'               , require('./routes/analyst'));
 app.use('/reports'                , require('./routes/report'));
+app.use('/hotStocks'              , require('./routes/hotStock'));
 app.get('/order/submit/ali'       , order.submitOrder);
 app.post('/order/submit/ali'      , order.submitOrder);
 app.get('/order/query/ali'        , order.queryOrder);
