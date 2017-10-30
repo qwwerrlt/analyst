@@ -49,5 +49,5 @@ let schema = new Schema({
 schema.index({analystId: 1, qmxReportId: 1}, {unique: true});
 schema.index({reportDate: 1});
 
-module.exports = db.api.model('Report', schema);
+module.exports = db.analyst.model('Report', schema);
 

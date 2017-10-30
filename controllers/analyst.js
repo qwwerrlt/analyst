@@ -62,10 +62,10 @@ exports.index = (req, res, next) => {
   //搜索排行
   let hotSearch = req.query.hotSearch;
   if (hotSearch) {
-     Analyst.find({winRate: {$gt: 0}, rank: {$gt: 0}},null, 
+     Analyst.find({winRate: {$gt: 0}, rank: {$gt: 0}},'name', 
          {sort: {searchTimes: -1}, limit: 10}, (err, docs) => {
          if (err) return next(err);
-         res.json(_.map(docs, 'name'));
+         res.json(docs);
      });
      return;
   }
@@ -85,8 +85,9 @@ exports.index = (req, res, next) => {
   if (!monthsAgo) {//获取全部的列表
     Analyst.find(
       {rank: {$gt: (page - 1) * pageNum}}, null,
-      {lean: true, limit: pageNum, sort: {rank: 1}},
-      (err, docs) => {
+      {lean: true, limit: pageNum, 
+      sort: {'latestReport.reportDate': -1, winRate: -1}
+    }, (err, docs) => {
         if (err) return next(err);
         res.json(docs);
       }
@@ -105,7 +106,8 @@ exports.index = (req, res, next) => {
   Analyst.find({
     'latestReport.reportDate': {$gt: monthsAgoDate}, total: {$gte: 10}
   }, null, {
-    lean: true, limit: pageNum, skip: (page - 1) * pageNum, sort: {winRate: -1}
+    lean: true, limit: pageNum, skip: (page - 1) * pageNum,
+    sort: {'latestReport.reportDate': -1, winRate: -1}
   }, (err, docs) => {
     if (err) return next(err);
     res.json(docs);

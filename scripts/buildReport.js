@@ -91,7 +91,7 @@ function buildReportData(report) {
 
 function getReportsByNextId(nextId, cb) {
   new mssql.Request().query(
-    `select top 100 * from report..QMXStockPool where ID > ${nextId} and InstituteFullName is not null and PriceRC is not null and PriceRC != 0`,
+    `select top 6 * from report..QMXStockPool where ID > ${nextId} and InstituteFullName is not null and PriceRC is not null and PriceRC != 0`,
     (err, records) => {
       if (!records) return cb(null, []);
       cb(err, records.recordset);
@@ -178,7 +178,7 @@ function processOneAnalystNameFunc(report, analystMap) {
       );
       return cb();//如果没有相关分析师，此条研报丢弃
     }//166340
-
+    console.log('update report', report.ID, analyst._id);
     async.series({
       createReport: (_cb) => {
         Report.update({
