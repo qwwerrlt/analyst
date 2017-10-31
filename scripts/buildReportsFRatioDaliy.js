@@ -10,27 +10,6 @@ const dzh = require('../common/dzh');
 const Report = _u.model('Report');
 const queueProcessFramework = require('./queueProcessFramework');
 
-let years = 5;
-
-let conditions = null;
-if (process.argv[2]) {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(process.argv[2])) {
-    let dateStr = process.argv[2]
-    conditions = {reportDate: {
-      $gte: moment(dateStr, 'YYYY-MM-DD').subtract(years, 'y'),
-      $lte: moment(dateStr, 'YYYY-MM-DD'),
-    }};
-  } else {
-    console.log('Usage: node buildReportsFRatio.js [dateStr]');
-    console.log('  e.g. node buildReportsFRatio.js 2010-04-01');
-    process.exit(1);
-  }
-} else {
-  conditions = {reportDate: {$gte: moment().subtract(years, 'y')}};
-}
-
-console.log(conditions);
-
 run();
 
 function run() {
@@ -40,9 +19,10 @@ function run() {
 //      _cb(null, '00000010:1461470182:a6d3a22e801a0505821b18358e56b0e869950da9');
     },
     process: (_cb, ret) => {
-      queueProcessFramework(
-        Report, conditions, buildProcessReportFunc(ret.token)
-      )(_cb);
+      queueProcessFramework(Report, {
+        reportDate: {$gte: moment().subtract(6, 'M')},
+//        updatedAt: {$lt: new Date('2016-04-26 16:40:53.557')},
+      }, buildProcessReportFunc(ret.token))(_cb);
     },
   }, (err, ret) => {
     if (err) {
@@ -56,6 +36,11 @@ function run() {
     }
   });
 }
+/*
+处理逻辑应该做如下优化：
+所有6个月以内的研报，首先检查fRatio，如果该字段存在，则表示已经取得研报当日的前复权价格，并且已经获得最高价和最低价，所以只需要去取今天的行情，进行对比，就可以更新相关字段。
+如果不存在fRatio，则需要走完整的取数据流程
+ */
 
 function buildProcessReportFunc(token) {
   return function(report, cb) {
@@ -97,7 +82,7 @@ function updateReport(report, fPriceRCAndDate, klineData, cb) {
   if (report.fMaxPrice > report.fTargetPriceL) report.winFlag = true;
 
 //  console.log(report); cb();
-  Report.update({_id: report._id}, report, cb);
+  report.save(cb);
 }
 
 function getMinAndMaxPrice(klineData) {
@@ -106,3 +91,4 @@ function getMinAndMaxPrice(klineData) {
     min: _.minBy(klineData, (line) => { return line[2]})[2],//最低价
   };
 }
+
