@@ -2,7 +2,7 @@
 
 const mongoose = require('mongoose');
 
-let analyst = mongoose.createConnection('mongodb://182.92.240.223:38128/analyst');
+let analyst = mongoose.createConnection('mongodb://58.246.102.220:3005/analyst');
 let api     = mongoose.createConnection('mongodb://182.92.240.223:38128/api');
 
 mongoose.connection.on('error', function () {
