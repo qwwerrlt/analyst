@@ -33,10 +33,8 @@ function run() {
     if (err) {
       logger.error(err);
       logger.error(err.stack);
-      process.exit(1);
     } else {
       logger.info('build reports completed: SUCCESS');
-      process.exit(0);
     }
   });
 }

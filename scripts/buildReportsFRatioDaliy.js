@@ -25,12 +25,8 @@ function run() {
   }, (err, ret) => {
     if (err) {
       logger.error(err);
-      process.exit(1);
     } else {
       logger.info('buildReportMinAndMaxPrice: SUCCESS');
-      setTimeout(() => {
-        process.exit(0);
-      }, 10000);
     }
   });
 }
