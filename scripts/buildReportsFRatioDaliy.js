@@ -10,8 +10,6 @@ const dzh = require('../common/dzh');
 const Report = _u.model('Report');
 const queueProcessFramework = require('./queueProcessFramework');
 
-run();
-
 function run() {
   _u.mySeries({
     token: (_cb) => {
@@ -36,6 +34,7 @@ function run() {
     }
   });
 }
+exports.run = run;
 /*
 处理逻辑应该做如下优化：
 所有6个月以内的研报，首先检查fRatio，如果该字段存在，则表示已经取得研报当日的前复权价格，并且已经获得最高价和最低价，所以只需要去取今天的行情，进行对比，就可以更新相关字段。

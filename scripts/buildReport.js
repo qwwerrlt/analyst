@@ -13,7 +13,7 @@ const Report = _u.model('Report');
 const Analyst = _u.model('Analyst');
 const ratio = require('./ratioTableOfGradeC.json');
 const isOrgNameChanged = require('./orgNameChangedList.json');
-run();
+
 
 function run() {
   _u.mySeries({
@@ -40,7 +40,7 @@ function run() {
     }
   });
 }
-
+exports.run = run;
 function buildAnalystMap(cb) {
   let map = {};
   let count = 0;
