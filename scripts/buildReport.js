@@ -92,7 +92,7 @@ function buildReportData(report) {
 function getReportsByNextId(nextId, cb) {
   async.retry({times: 6, interval: 100}, (_cb) => {
       new mssql.Request().query(
-        `select top 6 * from report..QMXStockPool where ID > ${nextId} and InstituteFullName is not null and PriceRC is not null and PriceRC != 0`,
+        `select top 30 * from report..QMXStockPool where ID > ${nextId} and InstituteFullName is not null and PriceRC is not null and PriceRC != 0`,
         (err, records) => {
           if (!records) return _cb('no report find');
           _cb(err, records.recordset);

@@ -86,7 +86,7 @@ exports.index = (req, res, next) => {
     Analyst.find(
       {rank: {$gt: (page - 1) * pageNum}}, null,
       {lean: true, limit: pageNum, 
-      sort: {'latestReport.reportDate': -1, winRate: -1}
+      sort: {winRate: -1}
     }, (err, docs) => {
         if (err) return next(err);
         res.json(docs);
@@ -107,7 +107,7 @@ exports.index = (req, res, next) => {
     'latestReport.reportDate': {$gt: monthsAgoDate}, total: {$gte: 10}
   }, null, {
     lean: true, limit: pageNum, skip: (page - 1) * pageNum,
-    sort: {'latestReport.reportDate': -1, winRate: -1}
+    sort: {winRate: -1}
   }, (err, docs) => {
     if (err) return next(err);
     res.json(docs);
