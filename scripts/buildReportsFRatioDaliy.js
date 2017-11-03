@@ -18,7 +18,7 @@ function run() {
     },
     process: (_cb, ret) => {
       queueProcessFramework(Report, {
-        reportDate: {$gte: moment().subtract(6, 'M')},
+        reportDate: {$gte: moment().subtract(1, 'M')},
 //        updatedAt: {$lt: new Date('2016-04-26 16:40:53.557')},
       }, buildProcessReportFunc(ret.token))(_cb);
     },
