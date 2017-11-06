@@ -77,7 +77,7 @@ function updateReport(report, fPriceRCAndDate, klineData, cb) {
   if (report.fMaxPrice > report.fTargetPriceL) report.winFlag = true;
 
 //  console.log(report); cb();
-  report.save(cb);
+    Report.update({_id: report._id}, report, cb);
 }
 
 function getMinAndMaxPrice(klineData) {

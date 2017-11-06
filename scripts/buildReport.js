@@ -36,9 +36,11 @@ function run() {
     } else {
       logger.info('build reports completed: SUCCESS');
     }
+    mssql.close();
   });
 }
-exports.run = run;
+run()
+//exports.run = run;
 function buildAnalystMap(cb) {
   let map = {};
   let count = 0;
