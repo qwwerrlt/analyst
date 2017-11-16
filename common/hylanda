@@ -1,0 +1,350 @@
+'use strict';
+
+const fs = require('fs');
+const urllib = require('url');
+const moment = require('moment');
+const _ = require('lodash');
+const async = require('async');
+const request = require('request');
+const AppErr = require('./AppErr');
+const _u = require('./util');
+const logger = _u.logger;
+const loggerD = _u.loggerD;
+const eLog = _u.eLog;
+const redisService = _u.service('redis');
+const EffectTopic = _u.model('EffectTopic');
+const NegativeTopic = _u.model('NegativeTopic');
+const constants = require('./constants');
+
+const url = 'http://api-v3.hylanda.com/api.php';
+const appKey = '6176113809265179692';
+
+const effectTemplateCode   = '10731062935624';//全网影响力
+const negativeTemplateCode = '10731090609972';//负面快报
+
+let hostWeightMap = null;//在脚本启动时调用方法填充，只填充一次
+function loadHostWeightMap(cb) {
+  if (hostWeightMap) return cb();
+
+  redisService.getHostWeightMap((err, map) => {
+    if (err) return cb(err);
+    hostWeightMap = map;
+    cb();
+  });
+}
+exports.loadHostWeightMap = loadHostWeightMap;
+
+let filterMap = {
+  topInfo: {disabled: {$ne: true}, rtype: 'topInfo'},
+  theme:   {disabled: {$ne: true}, rtype: 'theme'},
+  stock:   {disabled: {$ne: true}, rtype: 'stock'},
+  disableTopInfo: {
+    disabled: {$ne: true}, rtype: 'topInfo',
+    createdAt: {$lte: moment().subtract(31, 'd')}
+  },
+  disabled: {disabled: true, updatedAt: {
+    $gte: moment().subtract(10, 'd'),
+    $lte: moment().subtract(1, 'd'),
+  }},
+  negative: {},
+};
+let processFuncMap = {
+  //info: dispatchOneEffectTopic,
+  dpt: getDptDataThenProcessForOneEffectTopic,
+  effect: computeEffectForOneEffectTopic,
+  //disableTopInfo: disableOneTopic,
+  //clearUseless,
+  //negative: processNegativeFunc,
+};
+function processByActionTypeAndFilter(actionType, filterKey, cb) {
+  let processFunc = processFuncMap[actionType];
+  if (!processFunc) throw new Error('illegalActionType:' + actionType);
+
+  let filter = filterMap[filterKey] || {disabled: {$ne: true}};
+
+  let Model = actionType === 'negative' ? NegativeTopic : EffectTopic;
+  _u.mySeries({
+    docs: (_cb) => {
+      Model.find(filter, null, {lean: true, sort: {createdAt: -1}}, _cb);
+    },
+    process: (_cb, ret) => {
+      console.log({actionType, filterKey}, ret.docs.length);
+//      ret.docs = [{hylandaId: '10731067950071', nextId: '2016_07_220'}];
+      async.eachLimit(ret.docs, 5, processFunc, _cb);
+    },
+  }, cb);
+}
+exports.processByActionTypeAndFilter = processByActionTypeAndFilter;
+
+function getDptDataThenProcessForOneEffectTopic(effectTopic, cb) {
+  let hylandaId = effectTopic.hylandaId;
+  logger.info('omiGetDptData', hylandaId);
+  let cursor = '0';
+  async.doWhilst(
+    (_cb) => {
+      _u.mySeries({
+        scanResult: (__cb) => {
+          redisService.zscanUrlCrcs(hylandaId, cursor, __cb);
+        },
+        process: (__cb, ret) => {
+          cursor      = ret.scanResult[0];
+          let urlCrcs = ret.scanResult[1];
+//          console.log(hylandaId, cursor, urlCrcs);
+          processUrlCrcs(hylandaId, urlCrcs, __cb);
+        },
+      }, _cb);
+    },
+    () => { return cursor !== '0'; },
+    cb
+  );
+}
+
+function computeEffectForOneEffectTopic(effectTopic, cb) {
+  let hylandaId = effectTopic.hylandaId;
+  _u.mySeries({
+    hostCountMap: (_cb) => {
+      redisService.getHostCountMap(hylandaId, _cb);
+    },
+    totalDptCount: (_cb) => {
+      getDptTotalCount(hylandaId, _cb);
+    },
+    yesterdayTotalDptCount: (_cb, ret) => {
+      redisService.getYesterdayTotalCount(hylandaId, _cb);
+    },
+    effect: (_cb, ret) => {
+      let countChange = ret.totalDptCount - ~~ret.yesterdayTotalDptCount;
+
+      let effectOfInfoPart = computeEffectByHostCountMap(ret.hostCountMap);
+      if (effectOfInfoPart === 0) {
+        logger.warn('effectOfInfoPart is 0 for hylandaId:', hylandaId);
+      }
+      let effectOfdptPart = countChange / constants.dptBase;
+      if (effectOfdptPart < 0) {
+        logger.warn('effectOfdptPart is less than 0:', hylandaId);
+      }
+      console.log({
+        hylandaId, effect: effectOfInfoPart + effectOfdptPart,
+//        effectOfInfoPart, effectOfdptPart,
+//        today: ret.totalDptCount,
+//        yesterday: ~~ret.yesterdayTotalDptCount, countChange,
+      });
+      _cb(null, effectOfInfoPart + effectOfdptPart);
+    },
+    saveToRedis: (_cb, ret) => {
+      redisService.hsetEffect(hylandaId, ret.effect, _cb);
+    },
+    addToEffectRank: (_cb, ret) => {
+      if (effectTopic.rtype !== 'stock') return _cb();
+      redisService.zaddEffect(effectTopic.rid, ret.effect, _cb);
+    },
+  }, cb);
+}
+
+function getDptTotalCount(hylandaId, cb) {
+  _u.mySeries({
+    totalCount: (_cb) => {
+      computeDptTotalCount(hylandaId, _cb);
+    },
+    save: (_cb, ret) => {
+      redisService.setDptTotalCount(hylandaId, ret.totalCount, _cb);
+    },
+  }, (err, ret) => {
+    cb(err, ret.totalCount);
+  });
+}
+
+function computeDptTotalCount(hylandaId, cb) {
+  async.parallel([
+    (_cb) => {
+      redisService.getDptReducedCount(hylandaId, _cb);
+    },
+    (_cb) => {
+      redisService.sumGoOnUpdateCount(hylandaId, _cb);
+    },
+  ], (err, results) => {
+    if (err) return cb(err);
+//    console.log({hylandaId, reducedCount: ~~results[0], goOnUpdateCount: results[1], totalCount: ~~results[0] + results[1]});
+    cb(null, ~~results[0] + results[1]);
+  });
+}
+
+function computeEffectByHostCountMap(hostCountMap) {
+  let total = 0, notInHostWeight = 0, accumulatedWeight = 0;
+  _.each(hostCountMap, (count, host) => {
+    let weight = hostWeightMap[host];
+    if (weight) {
+      accumulatedWeight += weight;
+      total += 1;//对于有权重值的域名，计数时只算1
+    } else {
+      notInHostWeight += count;
+      total += count;
+    }
+  });
+  if (total === 0) {//hostCountMap为空
+    return 0;
+  }
+
+  let accumulatedPart = accumulatedWeight * 0.95,
+      notInHostWeightPart = notInHostWeight / total * 0.05;
+  return accumulatedPart + notInHostWeightPart;
+}
+
+let abnormalWordsMatchPattern = null;
+function buildAbnormalWordsMatchPattern(cb) {
+  fs.readFile( './scripts/abnormalMatchWords.txt', 'utf-8', (err, file) => {
+    if (err) return cb(err);
+    let pattern = new RegExp(file.trim().replace(/\n/g, '|'));
+    abnormalWordsMatchPattern = pattern;
+//    console.log(abnormalWordsMatchPattern);
+    cb(null, pattern);
+  });
+}
+exports.buildAbnormalWordsMatchPattern = buildAbnormalWordsMatchPattern;
+
+function buildHylandaId2eCodeMap(cb) {
+  EffectTopic.find({rid: /.stk$/}, 'hylandaId rid', (err, docs) => {
+    if (err) return cb(err);
+    let map = {};
+    _.each(docs, (doc) => {
+      map[doc.hylandaId] = doc.rid.substr(0, 8);
+    });
+    hylandaId2eCodeMap = map;
+    cb(null, map);
+  });
+}
+exports.buildHylandaId2eCodeMap = buildHylandaId2eCodeMap;
+
+let stockNameMap = null;
+function buildStockNameMap(cb) {
+  if (stockNameMap) return cb(null, stockNameMap);
+
+  Stock.find({iCode: /\.stk$/}, 'iCode name', {lean: true}, (err, docs) => {
+    if (err) return cb(err);
+    let map = {};
+    _.each(docs, (doc) => {
+      map[doc.iCode.substr(0, 8)] = doc.name.replace(/[*]ST/, '');
+    });
+    stockNameMap = map;
+    cb(null, map);
+  });
+}
+exports.buildStockNameMap = buildStockNameMap;
+
+function getSign(formBody) {
+  let keys = _.keys(formBody).sort();
+
+  let joinStr = (_.map(keys, (key) => {
+    return `${key}=${formBody[key]}`;
+  })).join('&');
+
+//  console.log(joinStr);
+  return _u.md5(joinStr + 'hylanda');
+}
+
+function omiCreateTopic(topicName, nodes, templateCode, cb) {
+  let form = {
+    appKey, op: 'omi_create_topic', topicName, templateCode,
+    nodes: JSON.stringify(nodes),
+  };
+  form.sign = getSign(form);
+  //这两个字段需要进行urlencode
+  form.topicName = encodeURIComponent(form.topicName);
+  form.nodes = encodeURIComponent(form.nodes);
+
+  request.post({url, form, json: true}, (err, response, body) => {
+    if (err) return cb(err);
+    if (+body.res !== 0) {
+      logger.error(`omi create topic with ${body.res}`);
+      logger.error(body);
+      return cb(new AppErr(
+        'hylandaError', null, {body}
+      ));
+    }
+    cb(null, body.msg);
+  });
+}
+
+//5秒后重试，超过5次，则放弃
+function retryOmiCreateTopic(topicName, nodes, templateCode, cb) {
+  let count = 1;
+  async.retry({times: 5, interval: 5000}, (_cb) => {
+    if (count > 1) logger.info('now retry create:', {topicName});
+    omiCreateTopic(topicName, nodes, templateCode, _cb);
+    count++;
+  }, cb);
+}
+
+function createOneTopic(data, cb) {
+  console.log('createOneTopic', data);
+  _u.mySeries({
+    hylandaId: (_cb) => {
+      let nodes = buildNodes(data.keyword);
+      let code  = effectTemplateCode;
+      retryOmiCreateTopic(data.topicName, nodes, code, (err, hylandaId) => {
+        if (err) {
+          loggerD.write({type: 'createEffectTopicError', data});
+          return _cb(err);
+        }
+        _cb(null, hylandaId);
+      });
+    },
+    save: (_cb, ret) => {
+      data.hylandaId = ret.hylandaId;
+      data.nextId = _u.initNextId();
+      EffectTopic.create(data, _cb);
+    },
+  }, cb);
+}
+exports.createOneTopic = createOneTopic;
+
+function createTopics(datas, cb) {
+  async.eachSeries(datas, createOneTopic, cb);
+}
+exports.createTopics = createTopics;
+
+//强制词 近义词 歧义词
+function buildNodes(keyword) {
+  let force = keyword.force,
+      similar = keyword.similar,
+      antonym = keyword.antonym;
+  let forceWords = force ? force.split(',') : [];
+
+  let nodes = [];//将会填充12个节点的信息
+  //强制词
+  _.each(constants.forceNodes, (node, i) => {
+    node.properties = [{
+      propertyName: 'feawords',
+      value: forceWords[i] || forceWords[0] || similar,
+    }];
+    nodes.push(node);
+  });
+
+  //近义词
+  let similarNode = constants.similarNode;
+  similarNode.properties = [{
+    propertyName: 'feawords',
+    value: similar,
+  }];
+  nodes.push(similarNode);
+
+  //歧义词
+  let antonymNode = constants.antonymNode;
+  antonymNode.properties = [{
+    propertyName: 'feawords',
+    value: antonym || '请输入特征词',
+  }];
+  nodes.push(antonymNode);
+
+  extendNodes(nodes);//有一些公共属性，在这里扩展上去
+  return {nodes};
+}
+
+function extendNodes(nodes) {
+  _.each(nodes, (node) => {
+    node.properties.push({
+      propertyName: 'ambiguwords',
+      value: '',
+    });
+    node.type = 'FeatureWords';
+  });
+}

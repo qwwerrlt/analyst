@@ -3,7 +3,9 @@
 const _ = require('lodash');
 const moment = require('moment');
 const async = require('async');
+const utf8 = require('utf8');
 require('date-utils');
+const crypto = require('crypto');
 const loggerConf = require('./initLogger');
 
 exports.logger  = loggerConf.logger;
@@ -93,3 +95,11 @@ exports.getOrderList = (orders, trades) => {
     })
 }
 
+exports.initNextId = () => {
+  return moment().format('YYYY_MM_DD') + '0';
+};
+
+function md5(str) {
+  return crypto.createHash('md5').update(utf8.encode(str)).digest('hex');
+}
+exports.md5 = md5;
