@@ -201,6 +201,7 @@ function buildAbnormalWordsMatchPattern(cb) {
 }
 exports.buildAbnormalWordsMatchPattern = buildAbnormalWordsMatchPattern;
 
+let hylandaId2eCodeMap = null;
 function buildHylandaId2eCodeMap(cb) {
   EffectTopic.find({rid: /.stk$/}, 'hylandaId rid', (err, docs) => {
     if (err) return cb(err);
