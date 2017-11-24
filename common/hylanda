@@ -23,6 +23,7 @@ const effectTemplateCode   = '10731062935624';//全网影响力
 const negativeTemplateCode = '10731090609972';//负面快报
 
 let hostWeightMap = null;//在脚本启动时调用方法填充，只填充一次
+/*加载redis域名权重*/
 function loadHostWeightMap(cb) {
   if (hostWeightMap) return cb();
 
@@ -33,6 +34,134 @@ function loadHostWeightMap(cb) {
   });
 }
 exports.loadHostWeightMap = loadHostWeightMap;
+/* 创建影响力、负面信息题材*/
+function buildProcessTopicFunc(handler) {
+  return function(topic, cb) {
+    logger.info('omiGetData', topic.hylandaId);
+    _u.mySeries({
+      process: (_cb) => {
+        omiGetData(topic, makeCallback(handler, topic, _cb));
+      },
+    }, cb);
+  };
+}
+//let processNegativeFunc    = buildProcessTopicFunc(negativeHandler);
+let dispatchOneEffectTopic = buildProcessTopicFunc(effectHandler);
+
+function effectHandler(topic, resources, cb) {
+  if (_.isEmpty(resources)) return cb();
+
+  let hylandaId = topic.hylandaId, nextId = topic.nextId;
+  _u.mySeries({
+    process: (_cb) => {
+      dispatch(hylandaId, resources, _cb);
+    },
+    updateNextId: (_cb) => {
+      EffectTopic.update({hylandaId}, {nextId}, {upsert: true}, _cb);
+    },
+  }, cb);
+}
+
+function omiGetData(topic, cb) {
+  let hylandaId = topic.hylandaId, nextId = topic.nextId;
+  let form = {
+    appKey, op: 'omi_get_data', kid: hylandaId, id: nextId, num: 60,
+    type: '0,1,2,3,4,11', format: 'v3',
+  };
+  form.sign = getSign(form);
+  let headers = {Connection: 'close'};
+
+  request.post({url, form, headers, json: true}, (err, response, body) => {
+    if (err || (body && +body.res !== 0)) {
+      logger.error('omi_get_data:', {hylandaId, nextId}, err || body);
+      return cb(null, {resource: [], next_id: nextId});//重新请求这个nextId
+    }
+
+    if (!body) {
+      eLog('omi_get_data:', {hylandaId, nextId}, 'undefined body');
+      return cb(null, {});//如果返回未定义的body，说明有大问题，直接结束吧
+    }
+
+    if (body.msg && body.msg.response) {
+      return cb(null, body.msg.response);
+    }
+
+    logger.warn('omi_get_data:', {hylandaId, nextId}, body);
+    cb(null, {});
+  });
+}
+
+function makeCallback(handler, topic, cb) {
+  return (err, msgResponse) => {
+    if (err) return cb(err);
+    if (!msgResponse.resource) return setTimeout(function() { cb(); }, 2000);
+
+    let resources = msgResponse.resource;
+    topic.nextId = msgResponse.next_id;
+    console.log(topic.hylandaId, topic.nextId, resources.length);
+
+    handler(topic, resources, (err) => {
+      if (err) return cb(err);
+      setTimeout(function() {
+        _u.isProduction
+          ? omiGetData(topic, makeCallback(handler, topic, cb))
+          : cb();
+      }, 2000);
+    });
+  }
+}
+
+function dispatch(hylandaId, resources, cb) {
+  let eCode = hylandaId2eCodeMap[hylandaId];
+  let sourceTypeCount = {}, hostCount = {}, urlCrcs = [], abnormals = {};
+  let INFO_TYPE = constants.sourceType.INFO;
+  _.each(resources, (resource) => {
+    let sourceType = resource.source_type;
+
+    if (eCode && isAbnormalWordsMatch(resource)) {
+      let key = `${eCode}:${sourceType}`;
+      if (!abnormals[key]) abnormals[key] = [];
+      abnormals[key].push(buildAbnormal(resource));
+
+      //对于资讯类，如果进入白名单列表，就单独放到99类别里面
+      if (sourceType === INFO_TYPE && shouldBeChosen(eCode, resource)) {
+        console.log('shouldBeChosen', eCode, resource.title);
+        key = `${eCode}:99`;
+        if (!abnormals[key]) abnormals[key] = [];
+        abnormals[key].push(buildAbnormal(resource));
+      }
+    }
+
+    //按照sourceType对资源进行计数
+    if (!sourceTypeCount[sourceType]) sourceTypeCount[sourceType] = 0;
+    sourceTypeCount[sourceType]++;
+
+    if (sourceType === INFO_TYPE) {//资讯类
+      let host = getMajorDomainFromResource(resource);
+      if (!hostCount[host]) hostCount[host] = 0;
+      hostCount[host]++;//根据host来计数
+    } else {//dpt类
+      urlCrcs.push(resource.url_crc);
+    }
+  });
+//  console.log({sourceTypeCount, hostCount, urlCrcs});
+//  console.log(abnormals);
+  async.parallel([
+    (_cb) => {
+      redisService.incrSourceTypeCount(hylandaId, sourceTypeCount, _cb);
+    },
+    (_cb) => {
+      redisService.incrHostCount(hylandaId, hostCount, _cb);
+    },
+    (_cb) => {
+      redisService.zaddUrlCrcs(hylandaId, urlCrcs, _cb);
+    },
+    (_cb) => {
+      redisService.batchPushAbnormals(abnormals, _cb);
+    },
+  ], cb);
+}
+
 
 let filterMap = {
   topInfo: {disabled: {$ne: true}, rtype: 'topInfo'},
@@ -49,7 +178,7 @@ let filterMap = {
   negative: {},
 };
 let processFuncMap = {
-  //info: dispatchOneEffectTopic,
+  info: dispatchOneEffectTopic,
   dpt: getDptDataThenProcessForOneEffectTopic,
   effect: computeEffectForOneEffectTopic,
   //disableTopInfo: disableOneTopic,

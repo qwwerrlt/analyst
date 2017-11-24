@@ -1,4 +1,5 @@
 loadEffectTopicFromHylandaTopicForTheme  录入EffectTopic
 
 1 loadHostWeightBaseData                   录入域名
-2 aggregateTotalPV                         计算域名权重                   
+2 aggregateTotalPV                         计算域名权重    
+3 buildHostWeightMap                       更新redis权重               

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zhcn">
+<head>
+    <meta charset="utf-8">
+    <title>Test page of esl</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="css/bootstrap.css" rel="stylesheet">
+	<style>
+      body {
+        padding-top: 60px; /* 60px to make the container go all the way to the bottom of the topbar */
+      }
+    </style>
+</head>
+<body>
+	<header class="container">
+		<div class="navbar navbar-inverse navbar-fixed-top">
+			<div class="navbar-inner">
+				<div class="container">
+					<ul class="nav">
+						<li class='active'><a href="#">研究员API</a></li>
+					</ul>
+				</div><!-- Container -->
+			</div><!-- Nav Bar - Inner -->
+		</div><!-- Nav Bar -->
+	</header><!-- /container -->
+	<section class="container">
+
+	<div class="page-header">
+		<section class="row">
+			<div class="span6">
+				<h1>研究员列表</h1>
+				<br>
+				<p>可选参数: page:页数</p>
+				<p>可选参数: perPage:每页数据数(默认20)</p>
+				<p>默认：所有研究员按胜率排序</p>
+				<a href="http://182.92.240.223:8080/analysts">http://182.92.240.223:8080/analysts</a>
+				<p></p>
+				<p>可选参数：latest</p>
+				<p>最新发布研报的研究员列表</p>
+				<a href="http://182.92.240.223:8080/analysts?latest=1">http://182.92.240.223:8080/analysts?latest=1</a>
+				<p></p>
+				<p>可选参数：timestamp</p>
+				<p>时间戳当天研报</p>
+				<a href="http://182.92.240.223:8080/analysts?timestamp=1511395200">http://182.92.240.223:8080/analysts?timestamp=1511395200</a>
+				<p></p>
+				<p>可选参数：keyword</p>
+				<p>研究员（按名字）模糊搜索</p>
+				<a href="http://182.92.240.223:8080/analysts?keyword=然">http://182.92.240.223:8080/analysts?keyword=然</a>
+				<p></p>
+				<p>可选参数：IDs</p>
+				<p>按ID获取研究员（多个逗号分隔）</p>
+				<a href="http://182.92.240.223:8080/analysts?IDs=59158702a8260a3768569dae">http://182.92.240.223:8080/analysts?IDs=59158702a8260a3768569dae</a>
+				<p></p>
+				<p>可选参数：monthsAgo</p>
+				<p>获取三个月或六个月内更新的研究员</p>
+				<a href="http://182.92.240.223:8080/analysts?monthsAgo=3">http://182.92.240.223:8080/analysts?monthsAgo=3</a>
+			</div>
+			<div class="span6">
+				<h1>研究员报表</h1>
+				<br>
+				<p>获取指定研究员信息</p>
+				<p>参数：研究员_id</p>
+				<a href="http://182.92.240.223:8080/analysts/59158702a8260a3768569dae">http://182.92.240.223:8080/analysts/59158702a8260a3768569dae</a>
+				<p></p>
+				<p>研究员荐股列表</p>
+				<p>参数：研究员_id</p>
+				<a href="http://182.92.240.223:8080/analysts/59158702a8260a3768569dae/stocks">http://182.92.240.223:8080/analysts/59158702a8260a3768569dae/stocks</a>
+				<p></p>
+				<p>研报详情查看</p>
+				<p>参数：研究员qmxReportId</p>
+				<a href="http://182.92.240.223:8080/reports/1">http://182.92.240.223:8080/reports/1</a>
+				<p></p>
+				<p>热股榜列表</p>
+				<p>参数：sortBy：排序依据 numAnalysts</p>
+				<a href="http://182.92.240.223:8080/hotStocks?sortBy=numAnalysts">http://182.92.240.223:8080/hotStocks?sortBy=numAnalysts</a>
+				<p></p>
+				<p>个股研测</p>
+				<p>参数：sCode 股票代码</p>
+				<a href="http://182.92.240.223:8080/hotStocks/600001/reports/v2">http://182.92.240.223:8080/hotStocks/600001/reports/v2</a>
+			</div>
+		</section>
+	</body>
+</html>
