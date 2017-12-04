@@ -9,6 +9,7 @@ const db = require('../common/connectMongo');
 let schema = new Schema({
   name: String,     //姓名
   photo: String,    //头像
+  photo2:String,
   sex: String,      //性别
   education: String,//学历
   certificateNum: { //证书编号，唯一
