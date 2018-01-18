@@ -58,11 +58,13 @@ function getFPriceRCAndDate(token, report, cb) {
   //end_time设为报告日，最后一条kline数据即为报告日价格
   let options = {
     obj: `${_u.getPrefixForStkCode(report.sCode)}${report.sCode}`, token,
-    end_time: formatDZHTime(moment(report.reportDate)), count: 1,
+    end_time: formatDZHTime(moment(report.reportDate)), start: -1, count: 1
   };
+  console.log(options)
   getKline(options, (err, kline) => {
     if (err) return cb(err);
     console.log('lookBackToGetFPriceRCAndDate:', report._id);
+    console.log(kline)
     let index = kline.data.length - 1;
     cb(null, buildFPriceRCAndDate(kline.data, index));
   });
